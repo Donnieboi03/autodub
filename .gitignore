@@ -27,8 +27,11 @@ htmlcov/
 .cache/
 cache/
 *.mka
+*.opus
 *.autodub.json
 render_cache/
+dub_sheets/
+ref_audio/
 
 # Media (keep out of public git)
 *.mkv
