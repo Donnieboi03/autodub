@@ -1,10 +1,11 @@
-"""CLI: doctor / run / voices / fixture."""
+"""CLI: doctor / run / watch / voices / fixture."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -57,9 +58,7 @@ def _cmd_fixture(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_run(args: argparse.Namespace) -> int:
-    from autodub.pipeline import run_file_pipeline
-
+def _require_run_paths(args: argparse.Namespace) -> tuple[Path, Path, Path] | int:
     media = Path(args.media)
     subs = Path(args.subs)
     cast = Path(args.cast)
@@ -72,6 +71,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if not cast.is_file():
         print(f"fail: cast sheet not found: {cast}", file=sys.stderr)
         return 2
+    return media, subs, cast
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    from autodub.pipeline import run_file_pipeline
+
+    paths = _require_run_paths(args)
+    if isinstance(paths, int):
+        return paths
+    media, subs, cast = paths
 
     result = run_file_pipeline(
         media,
@@ -80,9 +89,65 @@ def _cmd_run(args: argparse.Namespace) -> int:
         Path(args.out),
         max_workers=int(args.workers),
         limit_lines=args.limit_lines,
+        allow_caption_trim=bool(args.allow_caption_trim),
     )
     print(json.dumps(result, indent=2))
     return 0
+
+
+def _cmd_watch(args: argparse.Namespace) -> int:
+    """Run pipeline if mka missing/stale, then play video + EN track."""
+    from autodub.pipeline import run_file_pipeline
+
+    paths = _require_run_paths(args)
+    if isinstance(paths, int):
+        return paths
+    media, subs, cast = paths
+    out = Path(args.out)
+    mka = out / f"{media.stem}.autodub.mka"
+    need_run = args.force or (not mka.is_file())
+    if mka.is_file() and not args.force:
+        # stale if media or subs newer than mka
+        if media.stat().st_mtime > mka.stat().st_mtime or subs.stat().st_mtime > mka.stat().st_mtime:
+            need_run = True
+    if need_run:
+        result = run_file_pipeline(
+            media,
+            subs,
+            cast,
+            out,
+            max_workers=int(args.workers),
+            limit_lines=args.limit_lines,
+            allow_caption_trim=bool(args.allow_caption_trim),
+        )
+        print(json.dumps(result, indent=2))
+        mka = Path(result["mka"])
+    else:
+        print(json.dumps({"mka": str(mka), "skipped_run": True}, indent=2))
+
+    player = shutil.which("mpv") or shutil.which("ffplay")
+    if not player:
+        print("fail: need mpv or ffplay on PATH to watch", file=sys.stderr)
+        return 2
+    if Path(player).name == "mpv":
+        cmd = [player, f"--audio-file={mka}", str(media)]
+    else:
+        # ffplay: play video muted + audio from mka via amix is hard; play mka with video as ref
+        cmd = [
+            player,
+            "-autoexit",
+            "-i",
+            str(media),
+            "-i",
+            str(mka),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-shortest",
+        ]
+    print(f"# playing: {' '.join(cmd)}", file=sys.stderr)
+    return int(subprocess.call(cmd))
 
 
 def _cmd_voices_list(_: argparse.Namespace) -> int:
@@ -154,7 +219,23 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="cap caption lines (save TTS credits)",
     )
+    p_run.add_argument(
+        "--allow-caption-trim",
+        action="store_true",
+        help="allow shortening caption text for timing fit only",
+    )
     p_run.set_defaults(func=_cmd_run)
+
+    p_watch = sub.add_parser("watch", help="run pipeline if needed, then play video+EN")
+    p_watch.add_argument("--media", required=True)
+    p_watch.add_argument("--subs", required=True)
+    p_watch.add_argument("--cast", required=True)
+    p_watch.add_argument("--out", required=True, help="run output directory")
+    p_watch.add_argument("--workers", default="2")
+    p_watch.add_argument("--limit-lines", type=int, default=None)
+    p_watch.add_argument("--allow-caption-trim", action="store_true")
+    p_watch.add_argument("--force", action="store_true", help="always re-run pipeline")
+    p_watch.set_defaults(func=_cmd_watch)
 
     p_voices = sub.add_parser("voices", help="voice bank helpers")
     vsub = p_voices.add_subparsers(dest="voices_cmd", required=True)

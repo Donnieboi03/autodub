@@ -37,12 +37,16 @@ autodub run \
   --out   operator/runs/synthetic \
   --limit-lines 2
 
-# play with external audio
-mpv --audio-file=operator/runs/synthetic/synthetic.autodub.mka \
-    operator/fixtures/synthetic/synthetic.mp4
+# one-shot: pipeline (if needed) + play
+autodub watch \
+  --media operator/fixtures/synthetic/synthetic.mp4 \
+  --subs  operator/fixtures/synthetic/synthetic.en.srt \
+  --cast  operator/cast/bootstrap.cast.json \
+  --out   operator/runs/synthetic \
+  --limit-lines 2
 ```
 
-`voices ivc` requires a real media path; it fails fast if missing (do not invent show media).
+`voices ivc` is **operator/personal only** (not for public cast sheets). It requires a real media path and fails fast if missing.
 
 ## Overlay
 
