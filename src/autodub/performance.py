@@ -80,10 +80,15 @@ def bucket_from_features(
     f0_range: float,
     punct: str | None,
 ) -> str:
-    # punctuation can escalate
-    if punct == "intense" or arousal >= 0.85 or f0_range >= 120:
-        if arousal >= 0.92 or f0_range >= 160:
-            return "shout"
+    """
+    Bucket from arousal first; F0 range only boosts when energy is already up.
+    (Crude F0 proxies are noisy on music beds and must not alone force shout.)
+    """
+    energetic = arousal >= 0.55 or (arousal >= 0.35 and f0_range >= 80)
+    very_hot = arousal >= 0.85 or (arousal >= 0.6 and f0_range >= 120)
+    if punct == "intense" or energetic:
+        if very_hot or (punct == "intense" and arousal >= 0.45):
+            return "shout" if very_hot else "intense"
         return "intense"
     if punct == "calm" or arousal <= 0.12:
         if arousal <= 0.06:
