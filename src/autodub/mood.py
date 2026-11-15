@@ -67,8 +67,13 @@ def resolve_emotion(wav_path: Path | str, caption_text: str) -> EmotionSettings:
 
 
 def settings_for_bucket(bucket: str) -> EmotionSettings:
+    # Keep in sync with performance.el_controls_for_bucket
+    if bucket == "shout":
+        return EmotionSettings("shout", stability=0.18, similarity_boost=0.85, style=0.9)
     if bucket == "intense":
         return EmotionSettings("intense", stability=0.25, similarity_boost=0.8, style=0.75)
+    if bucket == "whisper":
+        return EmotionSettings("whisper", stability=0.65, similarity_boost=0.7, style=0.1)
     if bucket == "calm":
         return EmotionSettings("calm", stability=0.55, similarity_boost=0.7, style=0.15)
     return EmotionSettings("neutral", stability=0.4, similarity_boost=0.75, style=0.35)

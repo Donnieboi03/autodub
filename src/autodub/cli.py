@@ -1,4 +1,4 @@
-"""CLI: doctor / run / watch / voices / fixture."""
+"""CLI: doctor / run / watch / voices / fixture / score-voice."""
 
 from __future__ import annotations
 
@@ -92,6 +92,26 @@ def _cmd_run(args: argparse.Namespace) -> int:
         allow_caption_trim=bool(args.allow_caption_trim),
     )
     print(json.dumps(result, indent=2))
+    return 0
+
+
+def _cmd_score_voice(args: argparse.Namespace) -> int:
+    from autodub.score_voice import ScoreVoiceError, score_similarity
+
+    ref = Path(args.ref)
+    hyp = Path(args.hyp)
+    if not ref.is_file():
+        print(f"fail: ref not found: {ref}", file=sys.stderr)
+        return 2
+    if not hyp.is_file():
+        print(f"fail: hyp not found: {hyp}", file=sys.stderr)
+        return 2
+    try:
+        sim = score_similarity(ref, hyp)
+    except ScoreVoiceError as exc:
+        print(f"fail: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps({"ref": str(ref), "hyp": str(hyp), "spk_sim": sim}, indent=2))
     return 0
 
 
@@ -290,6 +310,14 @@ def main(argv: list[str] | None = None) -> int:
     p_vi.add_argument("--work", default="operator/ref_work")
     p_vi.add_argument("--description", default="")
     p_vi.set_defaults(func=_cmd_voices_ivc)
+
+    p_score = sub.add_parser(
+        "score-voice",
+        help="cosine speaker similarity (SpeechBrain ECAPA soft gate)",
+    )
+    p_score.add_argument("--ref", required=True, help="reference wav")
+    p_score.add_argument("--hyp", required=True, help="hypothesis / TTS wav")
+    p_score.set_defaults(func=_cmd_score_voice)
 
     args = parser.parse_args(argv)
     if not getattr(args, "command", None):

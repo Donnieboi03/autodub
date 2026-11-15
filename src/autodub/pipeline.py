@@ -14,7 +14,7 @@ from autodub.config import elevenlabs_tts_model, load_env
 from autodub.elevenlabs_client import ElevenLabsError, tts_to_file
 from autodub.events import emit
 from autodub.mix import TimedClip, mix_to_wav, wav_to_mka, write_run_manifest
-from autodub.mood import resolve_emotion
+from autodub.performance import resolve_performance
 from autodub.separate import extract_wav, resolve_me_stem, slice_wav
 from autodub.timing import fit_clip_to_window
 
@@ -104,8 +104,17 @@ def run_file_pipeline(
     t0 = time.perf_counter()
     me = resolve_me_stem(full_wav, work)
     me_wav = me.path
+    vocals_wav = me.vocals_path
     stages_ms["demucs_or_me"] = (time.perf_counter() - t0) * 1000.0
-    emit("me_stem_ready", method=me.method, path=str(me_wav))
+    emit(
+        "me_stem_ready",
+        method=me.method,
+        path=str(me_wav),
+        vocals=str(vocals_wav) if vocals_wav else None,
+    )
+
+    analysis_root = vocals_wav if (vocals_wav and Path(vocals_wav).is_file()) else full_wav
+    performance_source = "vocals" if analysis_root == vocals_wav else "mix_fallback"
 
     model = elevenlabs_tts_model()
     clips: list[TimedClip] = []
@@ -121,9 +130,23 @@ def run_file_pipeline(
             raise ElevenLabsError(f"no voice_id for character {binding.character_id}")
 
         slice_path = work / f"slice_{cap.index:04d}.wav"
-        slice_wav(full_wav, slice_path, cap.start_s, min(cap.end_s, cap.start_s + 2.5))
-        emo = resolve_emotion(slice_path, script)
-        key = cache_key(binding.voice_id, script, emo.bucket, model)
+        slice_end = min(cap.end_s, cap.start_s + max(target_s, 0.5))
+        slice_wav(analysis_root, slice_path, cap.start_s, slice_end)
+        cue = resolve_performance(
+            slice_path,
+            script,
+            target_s=target_s,
+            source=performance_source,
+        )
+        emit(
+            "performance_resolved",
+            character_id=binding.character_id,
+            index=cap.index,
+            bucket=cue.bucket,
+            source=cue.source,
+            arousal=cue.arousal,
+        )
+        key = cache_key(binding.voice_id, script, cue.bucket, model)
         raw_mp3 = cache_path(cache_root, key)
         hit = raw_mp3.is_file()
         chars_delta = 0
@@ -137,9 +160,9 @@ def run_file_pipeline(
                 binding.voice_id,
                 raw_mp3,
                 model_id=model,
-                stability=emo.stability,
-                similarity_boost=emo.similarity_boost,
-                style=emo.style,
+                stability=cue.stability,
+                similarity_boost=cue.similarity_boost,
+                style=cue.style,
             )
             chars_delta = len(script)
             emit(
@@ -147,7 +170,7 @@ def run_file_pipeline(
                 character_id=binding.character_id,
                 index=cap.index,
                 chars=len(script),
-                emotion=emo.bucket,
+                emotion=cue.bucket,
             )
         emit(
             "cast_matched",
@@ -170,7 +193,8 @@ def run_file_pipeline(
             "source_caption": cap.text,
             "character_id": binding.character_id,
             "voice_id": binding.voice_id,
-            "emotion": emo.bucket,
+            "emotion": cue.bucket,
+            "performance": cue.to_dict(),
             "cache_hit": hit,
             "audio": str(fitted.path),
             "target_s": fitted.target_s,

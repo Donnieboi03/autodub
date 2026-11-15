@@ -18,6 +18,8 @@ def test_emotion_punctuation_calm():
 
 def test_settings_intense_higher_style():
     assert settings_for_bucket("intense").style > settings_for_bucket("calm").style
+    assert settings_for_bucket("shout").style > settings_for_bucket("intense").style
+    assert settings_for_bucket("shout").stability < settings_for_bucket("calm").stability
 
 
 def test_fit_short_clip_ok(tmp_path: Path):

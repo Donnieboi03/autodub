@@ -18,6 +18,7 @@ class SeparateError(RuntimeError):
 class MeStemResult:
     path: Path
     method: str  # demucs | audio_separator | stereotools | volume
+    vocals_path: Path | None = None
 
 
 def _ffmpeg() -> str:
@@ -222,8 +223,8 @@ def resolve_me_stem(
         pair = try_demucs_vocals(full_wav, work_dir / "demucs")
         if not pair:
             return None
-        _vocals, no_vocals = pair
-        return MeStemResult(path=no_vocals, method="demucs")
+        vocals, no_vocals = pair
+        return MeStemResult(path=no_vocals, method="demucs", vocals_path=vocals)
 
     def _separator() -> MeStemResult | None:
         instrumental = try_audio_separator_instrumental(
@@ -231,12 +232,14 @@ def resolve_me_stem(
         )
         if not instrumental:
             return None
-        return MeStemResult(path=instrumental, method="audio_separator")
+        return MeStemResult(
+            path=instrumental, method="audio_separator", vocals_path=None
+        )
 
     def _approx() -> MeStemResult:
         out = approximate_me_stem(full_wav, work_dir / "me.wav")
         # detect which af succeeded by peeking at file (always me.wav)
-        return MeStemResult(path=out, method="stereotools")
+        return MeStemResult(path=out, method="stereotools", vocals_path=None)
 
     if method == "stereotools":
         return _approx()
