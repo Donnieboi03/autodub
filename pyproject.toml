@@ -14,6 +14,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0"]
+# Real vocal removal for M&E beds. demucs needs PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
+# on Python 3.15 when building sphn. audio-separator is heavier (UVR/MelBand models).
+separate = ["demucs>=4.0.0"]
+separate-uvr = ["audio-separator[cpu]>=0.24.0"]
 
 [project.scripts]
 autodub = "autodub.cli:main"

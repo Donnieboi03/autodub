@@ -13,10 +13,15 @@ cp .env.example .env
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+# optional real vocal removal for M&E beds (falls back to ffmpeg stereotools):
+#   PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 pip install -e ".[separate]"   # demucs
+#   pip install 'audio-separator[cpu]'                                 # UVR/MelBand
 autodub doctor
 ```
 
-Local-only (gitignored): `operator/` (cost, cast sheets, handoffs) and `holdout/` (blind acceptance — verifier only).
+M&E cascade: **demucs → audio-separator → stereotools**. Override with `AUTODUB_ME_METHOD`. Model weights stay in local caches — never commit them.
+
+Local-only (gitignored): `operator/` (cost, cast sheets, handoffs, media) and `holdout/` (blind acceptance — verifier only).
 
 ## File pipeline (synthetic smoke)
 

@@ -14,7 +14,7 @@ from autodub.elevenlabs_client import ElevenLabsError, tts_to_file
 from autodub.events import emit
 from autodub.mix import TimedClip, mix_to_wav, wav_to_mka, write_run_manifest
 from autodub.mood import emotion_bucket_from_wav, style_for_bucket
-from autodub.separate import approximate_me_stem, extract_wav, slice_wav, try_demucs_vocals
+from autodub.separate import extract_wav, resolve_me_stem, slice_wav
 
 _SPEAKER_PREFIX = re.compile(r"^([A-Za-z][A-Za-z0-9 _'-]{0,40}):\s+(.*)$")
 
@@ -72,11 +72,9 @@ def run_file_pipeline(
     work.mkdir(exist_ok=True)
 
     full_wav = extract_wav(media, work / "full.wav")
-    demucs = try_demucs_vocals(full_wav, work / "demucs")
-    if demucs:
-        _vocals, me_wav = demucs
-    else:
-        me_wav = approximate_me_stem(full_wav, work / "me.wav")
+    me = resolve_me_stem(full_wav, work)
+    me_wav = me.path
+    emit("me_stem_ready", method=me.method, path=str(me_wav))
 
     model = elevenlabs_tts_model()
     clips: list[TimedClip] = []
@@ -162,7 +160,13 @@ def run_file_pipeline(
             "cast": str(cast_path),
             "mka": str(out_mka),
             "model": model,
+            "me_method": me.method,
             "lines": manifest_lines,
         },
     )
-    return {"mka": str(out_mka), "manifest": str(manifest_path), "lines": len(manifest_lines)}
+    return {
+        "mka": str(out_mka),
+        "manifest": str(manifest_path),
+        "lines": len(manifest_lines),
+        "me_method": me.method,
+    }

@@ -29,6 +29,21 @@ def _cmd_doctor(_: argparse.Namespace) -> int:
     else:
         ok = False
         print("missing: ffmpeg (required for extract/mix/mka)", file=sys.stderr)
+    from autodub.separate import separator_status
+
+    sep = separator_status()
+    if sep["demucs"]:
+        print("ok: demucs available (preferred M&E)")
+    else:
+        print("info: demucs not installed — pip install 'autodub[separate]' (or demucs)")
+    if sep["audio_separator"]:
+        print("ok: audio-separator available (UVR/MelBand fallback)")
+    else:
+        print(
+            "info: audio-separator optional — "
+            "pip install 'audio-separator[cpu]' (large models; not in default deps)"
+        )
+    print(f"info: M&E order = {sep['default_me_order']}")
     print(f"info: TTS model = {elevenlabs_tts_model()}")
     return 0 if ok else 1
 
