@@ -4,6 +4,9 @@
 !.env.example
 operator/
 
+# Blind acceptance tests — verifier-only, not in public git
+holdout/
+
 # Python
 __pycache__/
 *.py[cod]

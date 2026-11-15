@@ -11,7 +11,7 @@ cp .env.example .env
 # edit .env → set ELEVENLABS_API_KEY
 ```
 
-Local-only operator notes (cost log, real cast sheets, agent handoffs) live in `operator/` — gitignored.
+Local-only (gitignored): `operator/` (cost, cast sheets, handoffs) and `holdout/` (blind acceptance — verifier only).
 
 ## Status
 
@@ -24,7 +24,8 @@ Scaffold. Pipeline and overlay land next.
 - `cast/examples/` — cast sheet schema only
 - `docs/CONTRACT.md` — behaviour contract
 - `docs/HANDOFF.template.md` — copy into `operator/handoffs/` for agents
-- `tests/` / `holdout/` — unit vs blind acceptance
+- `tests/` — implementer unit tests; `tests/audit/` for promoted acceptance
+- `holdout/` — local only (gitignored); blind verifier tests
 
 ## Ethics
 

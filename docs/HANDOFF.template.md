@@ -20,7 +20,7 @@ Copy to `operator/handoffs/<stream>-HANDOFF.md` (gitignored). Fill before fannin
 ## Do not
 
 - Commit `.env`, `operator/`, media, or real cast sheets with clone IDs
-- Feed `holdout/` source to the implementer
+- Feed `holdout/` source to the implementer (`holdout/` is gitignored; verifier-local only)
 - Invent caption text when EN subs exist
 
 ## Stub return (worker)
