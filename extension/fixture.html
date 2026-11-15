@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AutoDub Overlay Fixture</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #0f1419;
+        --fg: #e7ecf1;
+        --accent: #3dd6c6;
+      }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        background: radial-gradient(1200px 600px at 20% 0%, #1a2733, var(--bg));
+        color: var(--fg);
+        min-height: 100vh;
+      }
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+      }
+      h1 {
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        margin: 0 0 8px;
+      }
+      p {
+        opacity: 0.85;
+        margin: 0 0 16px;
+      }
+      video {
+        width: 100%;
+        background: #000;
+        border: 1px solid #2a3a48;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 12px 0;
+      }
+      button {
+        background: var(--accent);
+        color: #06241f;
+        border: 0;
+        padding: 8px 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #log {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        background: #0a0f14;
+        border: 1px solid #2a3a48;
+        padding: 12px;
+        min-height: 120px;
+      }
+      input {
+        flex: 1;
+        min-width: 220px;
+        padding: 8px;
+        background: #0a0f14;
+        border: 1px solid #2a3a48;
+        color: var(--fg);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>AutoDub</h1>
+      <p>HTML5 fixture — caption cues drive on-point EN play + duck when audio tap works.</p>
+      <video id="v" controls crossorigin="anonymous">
+        <source id="src" src="" type="video/mp4" />
+        <track id="track" kind="captions" srclang="en" label="EN" default />
+      </video>
+      <div class="row">
+        <input id="media" placeholder="file:///…/synthetic.mp4 or leave blank for tone demo" />
+        <input id="manifest" placeholder="manifest URL (optional)" />
+      </div>
+      <div class="row">
+        <button id="load">Load media / VTT</button>
+        <button id="probe">Capability probe</button>
+        <button id="start">Start overlay</button>
+        <button id="stop">Stop</button>
+      </div>
+      <div id="log"></div>
+    </main>
+    <script src="content.js"></script>
+    <script>
+      const logEl = document.getElementById("log");
+      function log(...args) {
+        logEl.textContent += args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") + "\n";
+      }
+      window.addEventListener("autodub-event", (e) => log("event", e.detail));
+
+      // Built-in silent-friendly demo: generate a short WebVTT blob + optional media
+      const DEMO_VTT = `WEBVTT
+
+00:00:01.000 --> 00:00:03.500
+Luffy: I'm gonna be King of the Pirates!
+
+00:00:04.000 --> 00:00:06.500
+Zoro: Don't get in my way.
+
+00:00:07.000 --> 00:00:09.500
+Nami: We need a better plan.
+
+00:00:10.000 --> 00:00:12.000
+Narrator: And so their journey continued.
+`;
+
+      function setTrack(vttText) {
+        const blob = new Blob([vttText], { type: "text/vtt" });
+        const url = URL.createObjectURL(blob);
+        const track = document.getElementById("track");
+        track.src = url;
+      }
+
+      document.getElementById("load").onclick = () => {
+        const media = document.getElementById("media").value.trim();
+        const video = document.getElementById("v");
+        const src = document.getElementById("src");
+        if (media) {
+          src.src = media;
+          video.load();
+        }
+        setTrack(DEMO_VTT);
+        log("loaded track; media=", media || "(none — attach your synthetic.mp4)");
+      };
+
+      document.getElementById("probe").onclick = () => {
+        log("probe", window.AutoDubOverlay.probe());
+      };
+
+      document.getElementById("start").onclick = async () => {
+        const manifestUrl = document.getElementById("manifest").value.trim();
+        try {
+          await window.AutoDubOverlay.start({
+            manifestUrl: manifestUrl || undefined,
+            nudgeMs: 0,
+          });
+          log("started", window.AutoDubOverlay.probe());
+        } catch (err) {
+          log("start error", String(err.message || err));
+        }
+      };
+
+      document.getElementById("stop").onclick = () => {
+        window.AutoDubOverlay.stop();
+        log("stopped");
+      };
+
+      // auto-init track for probe
+      setTrack(DEMO_VTT);
+      log("fixture ready — load synthetic.mp4 from autodub fixture output for full smoke");
+    </script>
+  </body>
+</html>

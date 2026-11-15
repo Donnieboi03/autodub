@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AutoDub</title>
+    <style>
+      body {
+        font: 13px/1.4 system-ui, sans-serif;
+        margin: 12px;
+        min-width: 260px;
+      }
+      label {
+        display: block;
+        margin: 8px 0 4px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+      }
+      button {
+        margin-top: 10px;
+        width: 100%;
+      }
+      #status {
+        margin-top: 8px;
+        color: #333;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <strong>AutoDub Overlay</strong>
+    <label>Manifest URL</label>
+    <input id="manifest" placeholder="file:///.../synthetic.autodub.json" />
+    <label>Nudge (ms)</label>
+    <input id="nudge" type="number" value="0" />
+    <button id="probe">Capability probe</button>
+    <button id="start">Start</button>
+    <button id="stop">Stop</button>
+    <div id="status"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>
