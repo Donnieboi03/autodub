@@ -13,7 +13,8 @@
         "backend": "elevenlabs",
         "voice_id": "REPLACE_WITH_YOUR_VOICE_ID",
         "ref_wav": null
-      }
+      },
+      "_comment": "Set ref_wav to a JP/EN slice under operator/ for cast_matcher on unlabeled captions"
     },
     {
       "character_id": "char_guest_policy",

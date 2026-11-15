@@ -20,6 +20,9 @@ separate = ["demucs>=4.0.0"]
 separate-uvr = ["audio-separator[cpu]>=0.24.0"]
 score = ["speechbrain>=1.0.0", "torch>=2.0.0"]
 
+[dependency-groups]
+dev = ["pytest>=8.0.0"]
+
 [project.scripts]
 autodub = "autodub.cli:main"
 

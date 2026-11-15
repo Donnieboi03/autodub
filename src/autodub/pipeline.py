@@ -1,58 +1,61 @@
 """File pipeline: captions + cast → TTS → timing fit → mix → mka + report.
 
-Dual-source (CONTRACT): EN caption sidecar owns spoken words + speaker identity
-(``Name:`` / ASS style → cast binding). JP/source Demucs vocals stem owns
-PerformanceCue (tone/expression). Soft ``score-voice`` never replaces caption
-identity for IVC enrollment.
+Dual-source (CONTRACT): EN caption sidecar owns spoken words; speaker identity
+comes from caption ``Name:`` / ASS style when present, else **cast_matcher**
+(JP vocals slice ↔ cast ``ref_wav`` bank). JP never overrides an explicit
+caption speaker prefix. Soft ``score-voice`` never replaces caption-verify for
+IVC enrollment.
 """
 
 from __future__ import annotations
 
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from autodub.cache import cache_key, cache_path
 from autodub.captions import load_captions, normalize_script_text
+from autodub.cast_match import resolve_cast_match
 from autodub.cast_sheet import CastSheet, VoiceBinding, load_cast_sheet
 from autodub.config import elevenlabs_tts_model, load_env
 from autodub.elevenlabs_client import ElevenLabsError, tts_to_file
 from autodub.events import emit
 from autodub.mix import TimedClip, mix_to_wav, wav_to_mka, write_run_manifest
+from autodub.paths import reportable_path
 from autodub.performance import resolve_performance
+from autodub.score_voice import ScoreVoiceError, score_similarity
 from autodub.separate import extract_wav, resolve_me_stem, slice_wav
 from autodub.timing import fit_clip_to_window
-
-_SPEAKER_PREFIX = re.compile(r"^([A-Za-z][A-Za-z0-9 _'-]{0,40}):\s+(.*)$")
 
 # Flash ≈ 0.5–1 credit/char on subscription; report uses 1.0 as conservative est
 _CREDITS_PER_CHAR = 1.0
 
 
 def _resolve_binding(text: str, cast: CastSheet) -> tuple[VoiceBinding, str]:
-    by_name = {b.name.lower(): b for b in cast.bindings}
-    by_id = cast.by_character_id()
-    m = _SPEAKER_PREFIX.match(text)
-    if m:
-        name, body = m.group(1), m.group(2)
-        key = name.lower()
-        if key in by_name:
-            return by_name[key], body
-        cid = name.lower().replace(" ", "_")
-        if cid in by_id:
-            return by_id[cid], body
-    # unknown / no prefix → prefer narrator/unknown binding if present
-    for pref in ("unknown", "narrator", "_guest"):
-        if pref in by_id:
-            return by_id[pref], text
-        for b in cast.bindings:
-            if b.name.lower() == pref:
-                return b, text
-    default = cast.default_voice()
-    if not default:
-        raise RuntimeError("cast sheet has no usable voice")
-    return default, text
+    """Caption-only resolve (tests / callers without a vocals slice)."""
+    result = resolve_cast_match(text, cast, vocals_slice=None)
+    return result.binding, result.script
+
+
+def _stock_fallback_voice(cast: CastSheet, binding: VoiceBinding) -> tuple[VoiceBinding, bool]:
+    """If binding has no voice_id, reuse first stock voice on the sheet."""
+    if binding.voice_id:
+        return binding, False
+    for b in cast.bindings:
+        if b.voice_id:
+            return (
+                VoiceBinding(
+                    character_id=binding.character_id,
+                    name=binding.name,
+                    backend=b.backend,
+                    voice_id=b.voice_id,
+                    ref_wav=binding.ref_wav,
+                ),
+                True,
+            )
+    raise ElevenLabsError(
+        f"no voice_id for character {binding.character_id} and no stock fallback on cast"
+    )
 
 
 def _maybe_trim_caption(script: str, target_s: float, allow_trim: bool) -> tuple[str, str]:
@@ -69,6 +72,37 @@ def _maybe_trim_caption(script: str, target_s: float, allow_trim: bool) -> tuple
     return trimmed, "caption_trimmed"
 
 
+def _auto_spk_sim(
+    cast: CastSheet,
+    manifest_lines: list[dict],
+    *,
+    score_ref: Path | None,
+) -> float | None:
+    """Optional soft SIM: --score-ref wav, or first cast ref_wav vs first fitted line."""
+    if not manifest_lines:
+        return None
+    hyp = Path(manifest_lines[0].get("audio") or "")
+    if not hyp.is_file():
+        return None
+    ref: Path | None = Path(score_ref) if score_ref else None
+    if ref is None or not ref.is_file():
+        for b in cast.bindings:
+            if not b.ref_wav or b.ref_wav == "from_line_slice":
+                continue
+            candidate = Path(b.ref_wav)
+            if not candidate.is_file():
+                candidate = (cast.path.parent / b.ref_wav).resolve()
+            if candidate.is_file():
+                ref = candidate
+                break
+    if ref is None or not ref.is_file():
+        return None
+    try:
+        return float(score_similarity(ref, hyp))
+    except ScoreVoiceError:
+        return None
+
+
 def run_file_pipeline(
     media: Path,
     subs: Path,
@@ -78,6 +112,7 @@ def run_file_pipeline(
     max_workers: int = 4,
     limit_lines: int | None = None,
     allow_caption_trim: bool = False,
+    score_ref: Path | None = None,
 ) -> dict:
     load_env()
     media = Path(media)
@@ -125,19 +160,29 @@ def run_file_pipeline(
     model = elevenlabs_tts_model()
     clips: list[TimedClip] = []
     manifest_lines: list[dict] = []
-    def render_one(cap_index: int) -> tuple[TimedClip, dict, int, int, int]:
-        """Returns clip, meta, chars_sent_delta, cache_hit_delta, fit_ok_delta."""
+    voice_fallback_stock = False
+
+    def render_one(cap_index: int) -> tuple[TimedClip, dict, int, int, int, bool]:
+        """Returns clip, meta, chars_sent_delta, cache_hit_delta, fit_ok_delta, stock_fallback."""
         cap = captions[cap_index]
-        binding, script = _resolve_binding(cap.text, cast)
+        slice_path = work / f"slice_{cap.index:04d}.wav"
         target_s = max(0.05, cap.end_s - cap.start_s)
+        slice_end = min(cap.end_s, cap.start_s + max(target_s, 0.5))
+        slice_wav(analysis_root, slice_path, cap.start_s, slice_end)
+
+        match = resolve_cast_match(
+            cap.text,
+            cast,
+            vocals_slice=slice_path,
+        )
+        binding = match.binding
+        script = match.script
+        binding, used_stock = _stock_fallback_voice(cast, binding)
         script = normalize_script_text(script)
         script, text_source = _maybe_trim_caption(script, target_s, allow_caption_trim)
         if not binding.voice_id:
             raise ElevenLabsError(f"no voice_id for character {binding.character_id}")
 
-        slice_path = work / f"slice_{cap.index:04d}.wav"
-        slice_end = min(cap.end_s, cap.start_s + max(target_s, 0.5))
-        slice_wav(analysis_root, slice_path, cap.start_s, slice_end)
         cue = resolve_performance(
             slice_path,
             script,
@@ -182,7 +227,8 @@ def run_file_pipeline(
             "cast_matched",
             character_id=binding.character_id,
             index=cap.index,
-            confidence=1.0 if _SPEAKER_PREFIX.match(cap.text) else 0.5,
+            confidence=match.confidence,
+            method=match.method,
         )
 
         fitted = fit_clip_to_window(
@@ -199,15 +245,19 @@ def run_file_pipeline(
             "source_caption": cap.text,
             "character_id": binding.character_id,
             "voice_id": binding.voice_id,
+            "cast_method": match.method,
+            "cast_confidence": match.confidence,
             "emotion": cue.bucket,
             "performance": cue.to_dict(),
             "cache_hit": hit,
-            "audio": str(fitted.path),
+            "audio": reportable_path(fitted.path, out_dir),
             "target_s": fitted.target_s,
             "tts_s": fitted.tts_s,
             "stretch_ratio": fitted.stretch_ratio,
             "fit_ok": fitted.fit_ok,
         }
+        if used_stock:
+            meta["voice_fallback"] = "stock"
         return (
             TimedClip(
                 start_s=cap.start_s,
@@ -219,6 +269,7 @@ def run_file_pipeline(
             chars_delta,
             hit_delta,
             fit_delta,
+            used_stock,
         )
 
     t0 = time.perf_counter()
@@ -228,12 +279,13 @@ def run_file_pipeline(
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futs = [pool.submit(render_one, i) for i in range(len(captions))]
         for fut in as_completed(futs):
-            clip, meta, cdelta, hdelta, fdelta = fut.result()
+            clip, meta, cdelta, hdelta, fdelta, stock = fut.result()
             clips.append(clip)
             manifest_lines.append(meta)
             chars_sent += cdelta
             cache_hits += hdelta
             fit_ok_n += fdelta
+            voice_fallback_stock = voice_fallback_stock or stock
     stages_ms["tts"] = (time.perf_counter() - t0) * 1000.0
     stages_ms["fit"] = stages_ms["tts"] * 0.15
 
@@ -251,14 +303,19 @@ def run_file_pipeline(
     fit_ok_ratio = (fit_ok_n / len(manifest_lines)) if manifest_lines else 0.0
     est_credits = chars_sent * _CREDITS_PER_CHAR
 
+    rel_media = reportable_path(media, out_dir)
+    rel_subs = reportable_path(subs, out_dir)
+    rel_cast = reportable_path(cast_path, out_dir)
+    rel_mka = reportable_path(out_mka, out_dir)
+
     manifest_path = out_dir / f"{media.stem}.autodub.json"
     write_run_manifest(
         manifest_path,
         {
-            "media": str(media),
-            "subs": str(subs),
-            "cast": str(cast_path),
-            "mka": str(out_mka),
+            "media": rel_media,
+            "subs": rel_subs,
+            "cast": rel_cast,
+            "mka": rel_mka,
             "model": model,
             "me_method": me.method,
             "lines": manifest_lines,
@@ -266,10 +323,10 @@ def run_file_pipeline(
     )
 
     report = {
-        "media": str(media),
-        "subs": str(subs),
-        "cast": str(cast_path),
-        "mka": str(out_mka),
+        "media": rel_media,
+        "subs": rel_subs,
+        "cast": rel_cast,
+        "mka": rel_mka,
         "model": model,
         "me_method": me.method,
         "stages_ms": stages_ms,
@@ -279,15 +336,34 @@ def run_file_pipeline(
         "fit_ok_ratio": round(fit_ok_ratio, 4),
         "est_credits": est_credits,
     }
+    if voice_fallback_stock:
+        report["voice_fallback"] = "stock"
+
+    want_score = score_ref is not None or any(
+        b.ref_wav and b.ref_wav != "from_line_slice" for b in cast.bindings
+    )
+    if want_score:
+        # Prefer absolute audio paths for scoring (manifest stores relative).
+        score_lines = []
+        for meta in manifest_lines:
+            audio = Path(meta["audio"])
+            if not audio.is_file():
+                audio = out_dir / meta["audio"]
+            score_lines.append({**meta, "audio": str(audio)})
+        spk = _auto_spk_sim(cast, score_lines, score_ref=score_ref)
+        if spk is not None:
+            report["spk_sim"] = spk
+
     report_path = out_dir / f"{media.stem}.autodub.report.json"
     write_run_manifest(report_path, report)
 
     return {
-        "mka": str(out_mka),
-        "manifest": str(manifest_path),
-        "report": str(report_path),
+        "mka": rel_mka,
+        "manifest": reportable_path(manifest_path, out_dir),
+        "report": reportable_path(report_path, out_dir),
         "lines": len(manifest_lines),
         "me_method": me.method,
         "fit_ok_ratio": fit_ok_ratio,
         "est_credits": est_credits,
+        "cache_hits": cache_hits,
     }

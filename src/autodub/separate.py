@@ -122,19 +122,35 @@ def _demucs_argv() -> list[str] | None:
 
 
 def try_demucs_vocals(full_wav: Path, out_dir: Path) -> tuple[Path, Path] | None:
-    """If demucs is available, return (vocals, no_vocals). Else None."""
+    """If demucs is available, return (vocals, no_vocals). Else None.
+
+    Stems are cached under ``out_dir / <media_hash>/`` so re-runs skip separation
+    when the source wav bytes are unchanged.
+    """
+    from autodub.cache import media_content_hash
+
     argv = _demucs_argv()
     if not argv:
         return None
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    full_wav = Path(full_wav)
+    media_hash = media_content_hash(full_wav)
+    cached = out_dir / media_hash
+    cached_v = cached / "vocals.wav"
+    cached_nv = cached / "no_vocals.wav"
+    if cached_v.is_file() and cached_nv.is_file():
+        return cached_v, cached_nv
+
+    run_dir = out_dir / f"run_{media_hash}"
+    run_dir.mkdir(parents=True, exist_ok=True)
     cmd = [
         *argv,
         "-n",
         "htdemucs",
         "--two-stems=vocals",
         "-o",
-        str(out_dir),
+        str(run_dir),
         str(full_wav),
     ]
     # Prefer MPS/CPU; demucs picks device. Keep env for operator overrides.
@@ -142,11 +158,14 @@ def try_demucs_vocals(full_wav: Path, out_dir: Path) -> tuple[Path, Path] | None
     proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if proc.returncode != 0:
         return None
-    found_v = list(out_dir.rglob("vocals.wav"))
-    found_nv = list(out_dir.rglob("no_vocals.wav"))
-    if found_v and found_nv:
-        return found_v[0], found_nv[0]
-    return None
+    found_v = list(run_dir.rglob("vocals.wav"))
+    found_nv = list(run_dir.rglob("no_vocals.wav"))
+    if not (found_v and found_nv):
+        return None
+    cached.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(found_v[0], cached_v)
+    shutil.copy2(found_nv[0], cached_nv)
+    return cached_v, cached_nv
 
 
 def try_audio_separator_instrumental(

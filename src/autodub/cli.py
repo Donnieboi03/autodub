@@ -91,6 +91,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return paths
     media, subs, cast = paths
 
+    score_ref = Path(args.score_ref) if getattr(args, "score_ref", None) else None
     result = run_file_pipeline(
         media,
         subs,
@@ -99,6 +100,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         max_workers=int(args.workers),
         limit_lines=args.limit_lines,
         allow_caption_trim=bool(args.allow_caption_trim),
+        score_ref=score_ref,
     )
     print(json.dumps(result, indent=2))
     return 0
@@ -190,6 +192,7 @@ def _cmd_watch(args: argparse.Namespace) -> int:
         if media.stat().st_mtime > mka.stat().st_mtime or subs.stat().st_mtime > mka.stat().st_mtime:
             need_run = True
     if need_run:
+        score_ref = Path(args.score_ref) if getattr(args, "score_ref", None) else None
         result = run_file_pipeline(
             media,
             subs,
@@ -198,9 +201,11 @@ def _cmd_watch(args: argparse.Namespace) -> int:
             max_workers=int(args.workers),
             limit_lines=args.limit_lines,
             allow_caption_trim=bool(args.allow_caption_trim),
+            score_ref=score_ref,
         )
         print(json.dumps(result, indent=2))
-        mka = Path(result["mka"])
+        mka_cand = Path(result["mka"])
+        mka = mka_cand if mka_cand.is_file() else (out / f"{media.stem}.autodub.mka")
     else:
         print(json.dumps({"mka": str(mka), "skipped_run": True}, indent=2))
 
@@ -348,6 +353,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="TTS model override (sets AUTODUB_TTS_MODEL; default stays Flash via env)",
     )
+    p_run.add_argument(
+        "--score-ref",
+        default=None,
+        help="optional wav for soft spk_sim in the episode report (vs first fitted line)",
+    )
     p_run.set_defaults(func=_cmd_run)
 
     p_watch = sub.add_parser("watch", help="run pipeline if needed, then play video+EN")
@@ -363,6 +373,11 @@ def main(argv: list[str] | None = None) -> int:
         "--model",
         default=None,
         help="TTS model override (sets AUTODUB_TTS_MODEL; default stays Flash via env)",
+    )
+    p_watch.add_argument(
+        "--score-ref",
+        default=None,
+        help="optional wav for soft spk_sim in the episode report",
     )
     p_watch.set_defaults(func=_cmd_watch)
 

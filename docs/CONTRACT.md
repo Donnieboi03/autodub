@@ -16,20 +16,22 @@
 
 ## Dual-source rule (locked)
 
-AutoDub does **not** invent script or identity from JP audio alone.
+AutoDub does **not** invent script from JP audio alone. Speaker identity uses captions when labeled; otherwise **cast_matcher** may map JP vocals → cast.
 
 | Source | Owns |
 | :--- | :--- |
-| **EN caption sidecar** | Spoken **words** (script fidelity) and **speaker identity** (`Name:` prefix and/or ASS style name → `character_id`) |
-| **JP / source vocals stem** (Demucs `vocals` when available) | **Tone / expression** → `PerformanceCue` (bucket, arousal, F0, rate, EL stability/style) |
+| **EN caption sidecar** | Spoken **words** (script fidelity). **Speaker identity** when a machine-readable label exists (`Name:` prefix and/or ASS style name → `character_id`) — labels always win |
+| **JP / source vocals stem** (Demucs `vocals` when available) | **Tone / expression** → `PerformanceCue` (bucket, arousal, F0, rate, EL stability/style). When captions lack a speaker label: **cast_matcher** cosine-matches the line vocals slice against cast `ref_wav` banks → `character_id` (else `unknown`/`narrator`) |
 
-Verify-by-caption is a **system rule**, not ear-vibes: enrollment and cast claims must be checkable against labeled captions covering the relevant time window.
+**cast_matcher:** method ∈ `{caption, jp_embed, default}`. `jp_embed` accepts the best cast ref above threshold (default **0.25**, calibrate later). Explicit `Luffy:` (etc.) is never overridden by JP similarity. Soft SIM / `spk_sim` never replaces caption-verify for IVC enrollment.
+
+Verify-by-caption is a **system rule**, not ear-vibes: IVC enrollment and cast identity *claims* must be checkable against labeled captions covering the enrollment window.
 
 ## Rules
 
 1. **Caption fidelity:** when EN captions exist, spoken text equals caption text (whitespace-normalized). No MT invention in that mode.
 2. **Cast lock:** after lock, same `character_id` → same voice for the episode/season.
-3. **Guests/unknowns / unlabeled cues:** when EN captions omit speaker labels, prefer **cast_matcher** (JP vocal embed → cast ref bank → EN voice) before parking on house voice. Low-confidence or failed match → `unknown`/`narrator` house voice (or zero-shot from slice when enabled); never assign a wrong main-cast voice below confidence threshold.
+3. **Guests/unknowns / unlabeled cues:** when EN captions omit speaker labels, prefer **cast_matcher** (JP vocal embed → cast ref bank → EN voice) before parking on house voice. Low-confidence or failed match → `unknown`/`narrator` house voice (or zero-shot from slice when enabled); never assign a wrong main-cast voice below confidence threshold. Missing `voice_id` falls back to stock and sets `voice_fallback=stock` (do not fail silently).
 4. **Timing fit:** each EN chunk targets the caption speech window (`end_s - start_s`).
    - After TTS, stretch duration into **0.85–1.15×** of target when needed (WSOLA/rubberband/ffmpeg).
    - `fit_ok` is true when final duration is within that band (or shorter and padded by silence into the window).
@@ -63,7 +65,7 @@ Verify-by-caption is a **system rule**, not ear-vibes: enrollment and cast claim
 
 ## Required events
 
-`line_rendered`, `cast_matched`, `cache_hit`, `overlay_underrun`, `audio_tap_unavailable`, `me_stem_ready`, `performance_resolved`
+`line_rendered`, `cast_matched` (payload includes `method` + `confidence`), `cache_hit`, `overlay_underrun`, `audio_tap_unavailable`, `me_stem_ready`, `performance_resolved`
 
 ## Episode report schema (required keys)
 
