@@ -1,49 +1,16 @@
 ---
-description: AutoDub public/private boundaries, blind holdout, handoffs, and secrets hygiene
+description: AutoDub product invariants (captions, ethics, prior-art glue)
 alwaysApply: true
 ---
 
-# AutoDub repo rules
+# AutoDub product rules
 
-## Public vs local
+Public/private git hygiene (`holdout/`, `operator/`, `.env`) is governed by the **global** rule `holdout-and-secrets` — follow that; do not restate it here.
 
-This repo is intended to be **public**. Never commit:
-
-| Path / pattern | Why |
-| --- | --- |
-| `.env` | API keys |
-| `operator/` | COST, DECISIONS, real cast/voice IDs, live HANDOFFs, media paths |
-| `holdout/` | Blind acceptance — verifier-only; implementer must not read or edit |
-| Episode media / stems / renders | `*.mkv`, `*.mp4`, `*.wav`, `*.mka`, cache dirs (see `.gitignore`) |
-
-`.env.example` stays empty of secrets (key names only). If a key was pasted into `.env.example`, move it to `.env` and clear the example before any commit.
-
-`cast/examples/` may ship **schema + fake IDs only**. Real One Piece (etc.) bindings live under `operator/cast/`.
-
-## Blind verification
-
-- Behaviour contract: `docs/CONTRACT.md` (public).
-- Implementer writes code + `tests/` only.
-- Verifier owns `holdout/` (local/gitignored). Do not show holdout source to the implementer.
-- Failures reported as **behaviour**, not test source.
-- Greens may be promoted into `tests/audit/` (public regression).
-
-## Cross-agent continuity
-
-- Before fanning or pausing a worker, write/update `operator/handoffs/<stream>-HANDOFF.md` from `docs/HANDOFF.template.md`.
-- Workers update the same HANDOFF before exit.
-- Chat reads HANDOFFs on resume — do not rely on chat scroll alone.
-- Never put API keys or real voice IDs in public docs or commit messages.
-
-## Product invariants (while building)
+## Product invariants
 
 - When EN captions exist: spoken text = caption text (no invented lines).
 - Do not redistribute episode files or AutoDub masters from this project.
 - Do not add DRM decryption / stream-ripping helpers.
 - Prefer prior-art glue over rewriting dub pipelines from scratch.
-
-## Commits
-
-- Commit public engine/docs/rules freely.
-- Never `git add -f` on `.env`, `operator/`, or `holdout/`.
-- Before push: `git status` and confirm those paths are absent.
+- `cast/examples/` = schema + fake IDs only; real cast bindings live under local `operator/cast/`.
