@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "show": {
+    "title": "Example Show",
+    "anilist_id": null,
+    "season": 1
+  },
+  "bindings": [
+    {
+      "character_id": "char_lead",
+      "name": "Lead",
+      "voice": {
+        "backend": "elevenlabs",
+        "voice_id": "REPLACE_WITH_YOUR_VOICE_ID",
+        "ref_wav": null
+      }
+    },
+    {
+      "character_id": "char_guest_policy",
+      "name": "_guest",
+      "voice": {
+        "backend": "cosyvoice_zeroshot",
+        "voice_id": null,
+        "ref_wav": "from_line_slice"
+      }
+    }
+  ]
+}

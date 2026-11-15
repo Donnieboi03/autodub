@@ -1,0 +1,44 @@
+# Secrets and local operator material (never push)
+.env
+.env.*
+!.env.example
+operator/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Caches and renders
+.cache/
+cache/
+*.mka
+*.autodub.json
+render_cache/
+
+# Media (keep out of public git)
+*.mkv
+*.mp4
+*.m4a
+*.wav
+*.flac
+*.aac
+*.mp3
+!cast/examples/**
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
