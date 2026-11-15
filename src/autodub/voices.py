@@ -24,7 +24,7 @@ def create_ivc_from_media(
     full = extract_wav(Path(media), work_dir / f"{name}_full.wav")
     ref = slice_wav(full, work_dir / f"{name}_ref.wav", start_s, end_s)
     voice_id = create_instant_voice_clone(name, [ref], description=description or f"AutoDub {name}")
-    emit("voice_cloned", name=name, voice_id=voice_id, ref=str(ref))
+    emit("voice_cloned", voice_name=name, voice_id=voice_id, ref=str(ref))
     return voice_id
 
 
