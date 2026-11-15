@@ -48,6 +48,7 @@ def test_required_events_emit():
         "cache_hit",
         "overlay_underrun",
         "audio_tap_unavailable",
+        "me_stem_ready",
     }
     for name in REQUIRED_EVENTS:
         event = emit(name, source="audit")
