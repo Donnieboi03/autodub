@@ -21,4 +21,9 @@ def elevenlabs_key_present() -> bool:
 
 
 def elevenlabs_tts_model() -> str:
-    return os.environ.get("ELEVENLABS_TTS_MODEL", "eleven_flash_v2_5").strip()
+    """Resolve TTS model: AUTODUB_TTS_MODEL → ELEVENLABS_TTS_MODEL → Flash default."""
+    for key in ("AUTODUB_TTS_MODEL", "ELEVENLABS_TTS_MODEL"):
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    return "eleven_flash_v2_5"

@@ -13,6 +13,10 @@ import soundfile as sf
 
 from autodub.separate import SeparateError
 
+# M&E gain under active dialogue (was 0.2 — bed nearly inaudible on listen).
+# 0.45 keeps bed listenable while dialogue stays intelligible at dialogue_peak.
+ME_DUCK_GAIN = 0.45
+
 
 @dataclass
 class TimedClip:
@@ -59,7 +63,7 @@ def mix_to_wav(
         dialogue[start:end] += piece[: end - start]
         # duck ME under dialogue region
         duck_end = end
-        me[start:duck_end] *= 0.2
+        me[start:duck_end] *= ME_DUCK_GAIN
 
     mixed = np.clip(me + dialogue, -1.0, 1.0)
     # stereo

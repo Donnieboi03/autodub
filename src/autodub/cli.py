@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 from autodub.config import elevenlabs_key_present, elevenlabs_tts_model, load_env
+
+
+def _apply_model_override(args: argparse.Namespace) -> None:
+    """Optional --model sets AUTODUB_TTS_MODEL for this process (does not bake into .env)."""
+    model = getattr(args, "model", None)
+    if model:
+        os.environ["AUTODUB_TTS_MODEL"] = str(model).strip()
 
 
 def _cmd_doctor(_: argparse.Namespace) -> int:
@@ -77,6 +85,7 @@ def _require_run_paths(args: argparse.Namespace) -> tuple[Path, Path, Path] | in
 def _cmd_run(args: argparse.Namespace) -> int:
     from autodub.pipeline import run_file_pipeline
 
+    _apply_model_override(args)
     paths = _require_run_paths(args)
     if isinstance(paths, int):
         return paths
@@ -168,6 +177,7 @@ def _cmd_watch(args: argparse.Namespace) -> int:
     """Run pipeline if mka missing/stale, then play video + EN track."""
     from autodub.pipeline import run_file_pipeline
 
+    _apply_model_override(args)
     paths = _require_run_paths(args)
     if isinstance(paths, int):
         return paths
@@ -277,6 +287,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="allow shortening caption text for timing fit only",
     )
+    p_run.add_argument(
+        "--model",
+        default=None,
+        help="TTS model override (sets AUTODUB_TTS_MODEL; default stays Flash via env)",
+    )
     p_run.set_defaults(func=_cmd_run)
 
     p_watch = sub.add_parser("watch", help="run pipeline if needed, then play video+EN")
@@ -288,6 +303,11 @@ def main(argv: list[str] | None = None) -> int:
     p_watch.add_argument("--limit-lines", type=int, default=None)
     p_watch.add_argument("--allow-caption-trim", action="store_true")
     p_watch.add_argument("--force", action="store_true", help="always re-run pipeline")
+    p_watch.add_argument(
+        "--model",
+        default=None,
+        help="TTS model override (sets AUTODUB_TTS_MODEL; default stays Flash via env)",
+    )
     p_watch.set_defaults(func=_cmd_watch)
 
     p_voices = sub.add_parser("voices", help="voice bank helpers")
