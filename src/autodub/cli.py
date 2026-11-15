@@ -1,4 +1,4 @@
-"""CLI: doctor / run / watch / voices / fixture / score-voice."""
+"""CLI: doctor / run / watch / voices / fixture / score-voice / score-run."""
 
 from __future__ import annotations
 
@@ -123,6 +123,19 @@ def _cmd_score_voice(args: argparse.Namespace) -> int:
         print(f"fail: {exc}", file=sys.stderr)
         return 2
     print(json.dumps({"ref": str(ref), "hyp": str(hyp), "spk_sim": sim}, indent=2))
+    return 0
+
+
+def _cmd_score_run(args: argparse.Namespace) -> int:
+    from autodub.scorecard import aggregate_score_run
+
+    out = Path(args.out)
+    try:
+        summary = aggregate_score_run(out)
+    except FileNotFoundError as exc:
+        print(f"fail: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(summary, indent=2))
     return 0
 
 
@@ -427,6 +440,13 @@ def main(argv: list[str] | None = None) -> int:
     p_score.add_argument("--ref", required=True, help="reference wav")
     p_score.add_argument("--hyp", required=True, help="hypothesis / TTS wav")
     p_score.set_defaults(func=_cmd_score_voice)
+
+    p_score_run = sub.add_parser(
+        "score-run",
+        help="aggregate spk_sim + cast_method from a finished run --out DIR",
+    )
+    p_score_run.add_argument("--out", required=True, help="run output directory")
+    p_score_run.set_defaults(func=_cmd_score_run)
 
     args = parser.parse_args(argv)
     if not getattr(args, "command", None):

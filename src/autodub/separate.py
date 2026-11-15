@@ -19,6 +19,7 @@ class MeStemResult:
     path: Path
     method: str  # demucs | audio_separator | stereotools | volume
     vocals_path: Path | None = None
+    demucs_cache_hit: bool = False
 
 
 def _ffmpeg() -> str:
@@ -121,8 +122,10 @@ def _demucs_argv() -> list[str] | None:
     return [sys.executable, "-m", "demucs"]
 
 
-def try_demucs_vocals(full_wav: Path, out_dir: Path) -> tuple[Path, Path] | None:
-    """If demucs is available, return (vocals, no_vocals). Else None.
+def try_demucs_vocals(
+    full_wav: Path, out_dir: Path
+) -> tuple[Path, Path, bool] | None:
+    """If demucs is available, return (vocals, no_vocals, cache_hit). Else None.
 
     Stems are cached under ``out_dir / <media_hash>/`` so re-runs skip separation
     when the source wav bytes are unchanged.
@@ -140,7 +143,7 @@ def try_demucs_vocals(full_wav: Path, out_dir: Path) -> tuple[Path, Path] | None
     cached_v = cached / "vocals.wav"
     cached_nv = cached / "no_vocals.wav"
     if cached_v.is_file() and cached_nv.is_file():
-        return cached_v, cached_nv
+        return cached_v, cached_nv, True
 
     run_dir = out_dir / f"run_{media_hash}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -165,7 +168,7 @@ def try_demucs_vocals(full_wav: Path, out_dir: Path) -> tuple[Path, Path] | None
     cached.mkdir(parents=True, exist_ok=True)
     shutil.copy2(found_v[0], cached_v)
     shutil.copy2(found_nv[0], cached_nv)
-    return cached_v, cached_nv
+    return cached_v, cached_nv, False
 
 
 def try_audio_separator_instrumental(
@@ -242,8 +245,13 @@ def resolve_me_stem(
         pair = try_demucs_vocals(full_wav, work_dir / "demucs")
         if not pair:
             return None
-        vocals, no_vocals = pair
-        return MeStemResult(path=no_vocals, method="demucs", vocals_path=vocals)
+        vocals, no_vocals, cache_hit = pair
+        return MeStemResult(
+            path=no_vocals,
+            method="demucs",
+            vocals_path=vocals,
+            demucs_cache_hit=cache_hit,
+        )
 
     def _separator() -> MeStemResult | None:
         instrumental = try_audio_separator_instrumental(

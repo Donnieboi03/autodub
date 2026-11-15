@@ -72,6 +72,14 @@ autodub watch \
 
 Optional soft SIM on a run: `--score-ref REF.wav` → report `spk_sim`.
 
+After a finished run, aggregate report keys:
+
+```bash
+autodub score-run --out operator/runs/m09_settle_luffy
+```
+
+Each run also writes `events.jsonl` and `*.autodub.scorecard.md` beside the report.
+
 ## Overlay
 
 Load `extension/` unpacked in Chrome. Open `extension/fixture.html`, capability-probe, then point at a run manifest. See `extension/README.md`.

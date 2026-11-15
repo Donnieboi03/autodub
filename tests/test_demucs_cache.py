@@ -24,7 +24,8 @@ def test_demucs_cache_hit_skips_subprocess(tmp_path: Path):
             result = try_demucs_vocals(full, out_dir)
             run.assert_not_called()
     assert result is not None
-    vocals, no_vocals = result
+    vocals, no_vocals, cache_hit = result
+    assert cache_hit is True
     assert vocals.read_bytes() == b"v"
     assert no_vocals.read_bytes() == b"n"
 
@@ -47,7 +48,8 @@ def test_demucs_writes_cache_after_run(tmp_path: Path):
         with mock.patch("autodub.separate.subprocess.run", side_effect=fake_run):
             result = try_demucs_vocals(full, out_dir)
     assert result is not None
-    vocals, no_vocals = result
+    vocals, no_vocals, cache_hit = result
+    assert cache_hit is False
     assert vocals == out_dir / media_hash / "vocals.wav"
     assert no_vocals == out_dir / media_hash / "no_vocals.wav"
     assert vocals.read_bytes() == b"voc"
