@@ -8,6 +8,7 @@ from .contract_rules import (
     REPORT_REQUIRED_KEYS,
     REPORT_STAGES_MS_KEYS,
     episode_report_schema_holds,
+    episode_report_spk_sim_holds,
 )
 
 
@@ -43,4 +44,15 @@ def test_valid_report_holds():
 def test_report_rejects_missing_key(missing: str):
     report = _valid_report()
     del report[missing]
+    assert not episode_report_schema_holds(report)
+
+
+def test_spk_sim_optional_number_when_present():
+    report = _valid_report()
+    assert episode_report_spk_sim_holds(report)
+    report["spk_sim"] = 0.5
+    assert episode_report_spk_sim_holds(report)
+    assert episode_report_schema_holds(report)
+    report["spk_sim"] = "high"
+    assert not episode_report_spk_sim_holds(report)
     assert not episode_report_schema_holds(report)

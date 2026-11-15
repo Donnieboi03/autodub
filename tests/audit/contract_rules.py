@@ -67,6 +67,58 @@ def line_or_report_timing_fields_hold(obj: Mapping[str, Any]) -> bool:
     return True
 
 
+# CONTRACT §Rules.5 — PerformanceCue predicates (M0.6, promoted thin subset)
+PERFORMANCE_BUCKETS = frozenset({"whisper", "calm", "neutral", "intense", "shout"})
+HIGH_AROUSAL_BUCKETS = frozenset({"intense", "shout"})
+LOW_AROUSAL_BUCKETS = frozenset({"calm", "whisper"})
+PERFORMANCE_MANIFEST_REQUIRED_KEYS = frozenset(
+    {
+        "bucket",
+        "arousal",
+        "target_s",
+        "stability",
+        "style",
+        "similarity_boost",
+    }
+)
+
+
+def performance_bucket_valid(bucket: Any) -> bool:
+    return isinstance(bucket, str) and bucket.strip().lower() in PERFORMANCE_BUCKETS
+
+
+def performance_manifest_object_holds(performance: Mapping[str, Any]) -> bool:
+    if not PERFORMANCE_MANIFEST_REQUIRED_KEYS.issubset(performance.keys()):
+        return False
+    if not performance_bucket_valid(performance.get("bucket")):
+        return False
+    for key in ("arousal", "target_s", "stability", "style", "similarity_boost"):
+        val = performance.get(key)
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            return False
+    return True
+
+
+def el_controls_high_vs_low_arousal(
+    *,
+    high_stability: float,
+    high_style: float,
+    low_stability: float,
+    low_style: float,
+) -> bool:
+    return float(high_stability) < float(low_stability) and float(high_style) > float(
+        low_style
+    )
+
+
+def loud_wav_maps_to_high_arousal_bucket(bucket: str) -> bool:
+    return isinstance(bucket, str) and bucket.strip().lower() in HIGH_AROUSAL_BUCKETS
+
+
+def quiet_wav_maps_to_low_arousal_bucket(bucket: str) -> bool:
+    return isinstance(bucket, str) and bucket.strip().lower() in LOW_AROUSAL_BUCKETS
+
+
 # CONTRACT §Episode report schema
 REPORT_REQUIRED_KEYS = frozenset(
     {
@@ -108,6 +160,13 @@ def episode_report_stages_ms_complete(report: Mapping[str, Any]) -> bool:
     return REPORT_STAGES_MS_KEYS.issubset(stages.keys())
 
 
+def episode_report_spk_sim_holds(report: Mapping[str, Any]) -> bool:
+    if "spk_sim" not in report:
+        return True
+    val = report["spk_sim"]
+    return isinstance(val, (int, float)) and not isinstance(val, bool)
+
+
 def episode_report_schema_holds(report: Mapping[str, Any]) -> bool:
     if not episode_report_has_required_keys(report):
         return False
@@ -116,6 +175,8 @@ def episode_report_schema_holds(report: Mapping[str, Any]) -> bool:
     if not isinstance(report.get("lines"), Sequence) or isinstance(
         report.get("lines"), (str, bytes)
     ):
+        return False
+    if not episode_report_spk_sim_holds(report):
         return False
     return True
 
@@ -128,5 +189,6 @@ REQUIRED_EVENTS = frozenset(
         "overlay_underrun",
         "audio_tap_unavailable",
         "me_stem_ready",
+        "performance_resolved",
     }
 )
