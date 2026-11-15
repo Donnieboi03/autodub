@@ -1,4 +1,10 @@
-"""File pipeline: captions + cast → TTS → timing fit → mix → mka + report."""
+"""File pipeline: captions + cast → TTS → timing fit → mix → mka + report.
+
+Dual-source (CONTRACT): EN caption sidecar owns spoken words + speaker identity
+(``Name:`` / ASS style → cast binding). JP/source Demucs vocals stem owns
+PerformanceCue (tone/expression). Soft ``score-voice`` never replaces caption
+identity for IVC enrollment.
+"""
 
 from __future__ import annotations
 

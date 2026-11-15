@@ -237,7 +237,13 @@ def _cmd_voices_stock_cast(args: argparse.Namespace) -> int:
 
 
 def _cmd_voices_ivc(args: argparse.Namespace) -> int:
-    from autodub.voices import create_ivc_from_media
+    from autodub.events import emit
+    from autodub.voices import (
+        CaptionVerifyError,
+        character_id_from_name,
+        create_ivc_from_media,
+        verify_ivc_caption_window,
+    )
 
     media = Path(args.media)
     if not media.is_file():
@@ -246,15 +252,65 @@ def _cmd_voices_ivc(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+
+    subs = Path(args.subs)
+    character_id = (args.character or "").strip() or character_id_from_name(args.name)
+    start_s = float(args.start)
+    end_s = float(args.end)
+    force = bool(args.force_unverified)
+
+    if not force:
+        try:
+            matched = verify_ivc_caption_window(
+                subs,
+                character_id=character_id,
+                start_s=start_s,
+                end_s=end_s,
+            )
+        except CaptionVerifyError as exc:
+            print(f"fail: {exc}", file=sys.stderr)
+            return 2
+        emit(
+            "ivc_caption_verified",
+            character_id=character_id,
+            matched_cues=len(matched),
+            start_s=start_s,
+            end_s=end_s,
+            subs=str(subs),
+        )
+    else:
+        emit(
+            "ivc_caption_unverified",
+            warning=True,
+            character_id=character_id,
+            start_s=start_s,
+            end_s=end_s,
+            subs=str(subs) if subs.is_file() else None,
+            message="IVC enrollment forced without caption-verify",
+        )
+        print(
+            "warning: --force-unverified — IVC enrollment is not caption-verified",
+            file=sys.stderr,
+        )
+
     voice_id = create_ivc_from_media(
         args.name,
         media,
-        start_s=float(args.start),
-        end_s=float(args.end),
+        start_s=start_s,
+        end_s=end_s,
         work_dir=Path(args.work),
         description=args.description or "",
     )
-    print(json.dumps({"name": args.name, "voice_id": voice_id}))
+    print(
+        json.dumps(
+            {
+                "name": args.name,
+                "character_id": character_id,
+                "voice_id": voice_id,
+                "caption_verified": not force,
+            }
+        )
+    )
     return 0
 
 
@@ -322,13 +378,31 @@ def main(argv: list[str] | None = None) -> int:
     p_vs.add_argument("--season", default="1")
     p_vs.set_defaults(func=_cmd_voices_stock_cast)
 
-    p_vi = vsub.add_parser("ivc", help="create IVC from media slice (needs real path)")
-    p_vi.add_argument("--name", required=True)
+    p_vi = vsub.add_parser(
+        "ivc",
+        help="create IVC from media slice; requires caption-verify (--subs)",
+    )
+    p_vi.add_argument("--name", required=True, help="IVC voice name (also character_id if --character omitted)")
+    p_vi.add_argument(
+        "--character",
+        default=None,
+        help="character_id for caption-verify (default: slug of --name)",
+    )
     p_vi.add_argument("--media", required=True)
+    p_vi.add_argument(
+        "--subs",
+        required=True,
+        help="EN caption sidecar with speaker labels covering the slice",
+    )
     p_vi.add_argument("--start", required=True, type=float)
     p_vi.add_argument("--end", required=True, type=float)
     p_vi.add_argument("--work", default="operator/ref_work")
     p_vi.add_argument("--description", default="")
+    p_vi.add_argument(
+        "--force-unverified",
+        action="store_true",
+        help="operator escape: skip caption-verify (emits warning event)",
+    )
     p_vi.set_defaults(func=_cmd_voices_ivc)
 
     p_score = sub.add_parser(

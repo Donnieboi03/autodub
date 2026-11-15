@@ -2,6 +2,8 @@
 
 Unofficial English dialogue track for anime you can already play: caption-faithful words, stable voices per character, pre-rendered chunks mixed or overlaid on-point.
 
+**Dual-source (locked):** EN captions own **words + speaker**; JP/source **vocals** stem owns **tone / PerformanceCue**. IVC enrollment must pass caption-verify (`voices ivc --subs …`) — see `docs/CONTRACT.md`.
+
 **Bring your own keys and voices.** This repo does not ship voice models of real people or episode media.
 
 ## Quick start
@@ -46,7 +48,7 @@ autodub watch \
   --limit-lines 2
 ```
 
-`voices ivc` is **operator/personal only** (not for public cast sheets). It requires a real media path and fails fast if missing.
+`voices ivc` is **operator/personal only** (not for public cast sheets). It requires `--media`, `--subs` (speaker-labeled captions covering the slice), and `--character` (or `--name` mapped to `character_id`). Caption-verify fails fast unless `--force-unverified`.
 
 ## Overlay
 
