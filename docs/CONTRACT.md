@@ -29,7 +29,7 @@ Verify-by-caption is a **system rule**, not ear-vibes: enrollment and cast claim
 
 1. **Caption fidelity:** when EN captions exist, spoken text equals caption text (whitespace-normalized). No MT invention in that mode.
 2. **Cast lock:** after lock, same `character_id` → same voice for the episode/season.
-3. **Guests/unknowns:** low-confidence or unknown speaker → `unknown`/`narrator` house voice (or zero-shot from slice when enabled); never assign a wrong main-cast voice below confidence threshold.
+3. **Guests/unknowns / unlabeled cues:** when EN captions omit speaker labels, prefer **cast_matcher** (JP vocal embed → cast ref bank → EN voice) before parking on house voice. Low-confidence or failed match → `unknown`/`narrator` house voice (or zero-shot from slice when enabled); never assign a wrong main-cast voice below confidence threshold.
 4. **Timing fit:** each EN chunk targets the caption speech window (`end_s - start_s`).
    - After TTS, stretch duration into **0.85–1.15×** of target when needed (WSOLA/rubberband/ffmpeg).
    - `fit_ok` is true when final duration is within that band (or shorter and padded by silence into the window).

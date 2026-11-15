@@ -1,0 +1,48 @@
+---
+description: AutoDub agent behavior — initiative, caption-verify, cast_matcher, numbered scoreboards
+alwaysApply: true
+---
+
+# AutoDub agent rules
+
+Applies when working on the AutoDub repo (`autodub/`) or its `operator/` paths. Ignore otherwise.
+
+Product behaviour stays in `docs/CONTRACT.md` — keep this file aligned; do not invent opposite policy. Public/private git hygiene is the global `holdout-and-secrets` rule (do not restate).
+
+## Dual-source + casting
+
+| Source | Owns |
+| :--- | :--- |
+| **EN captions** | Spoken **words** always; **speaker** when labeled (`Name:`, ASS style, VTT `<v>`) |
+| **JP / Demucs vocals** | **Tone / PerformanceCue** only — never invent identity from JP alone |
+| **Unlabeled EN cues** | Run **cast_matcher** (JP vocal embed → cast ref bank → EN voice). Do **not** park forever on narrator/unknown without trying match. Fall back to house `unknown`/`narrator` only after match fails or confidence is below threshold. |
+
+## IVC / voice identity
+
+- Instant Voice Clone only with **caption-aligned** speaker for the slice (`voices ivc --subs … --character …`). Soft SIM never overrides caption-verify.
+- Operator **ear reject** or `REJECTED` in DECISIONS → stop claiming that clone; prefer stock/house until new caption-verified refs pass.
+- Exhaust **in-repo `operator/` + legal Archive.org / promo / trailer** before asking the operator to “drop files.”
+- **Forbidden audio hunts:** home-wide `find`, Downloads/Desktop crawls, Chrome Safe Storage / Keychain unlocks for cookies. Stay in-repo + explicitly allowed URLs.
+
+## Initiative (do not park on the operator)
+
+1. Own blockers: try the next legal path; ask the operator only after **two serious paths** failed.
+2. Legal promo/trailer OK. **No** full-episode pirate / DRM rip / stream-rip helpers.
+3. Public demos and `cast/examples/` = **stock / licensed** IDs only. Personal IVC ids, refs, and real cast bindings live under gitignored `operator/` only.
+4. Do **not** edit the user’s plan files (`.cursor/plans/*`) unless they explicitly ask.
+5. Do **not** end with vague “no further follow-up” / “your turn” while cast, IVC, or SIM work is still wrong or unfinished.
+
+## Status = numbered scoreboard
+
+After a run or listen, return a **numbered** table (not vibes). Include at least what applies:
+
+1. `fit_ok` / `fit_ok_ratio`
+2. Speaker SIM (and whether caption-verified)
+3. Credits / chars + TTS **model**
+4. Cast method (`caption` / `cast_matcher` / `stock` / `narrator`) per contested line or character
+5. `me_method` / duck if relevant
+6. Commit tip or run id when shipping
+
+## Paste line for chats
+
+> Follow autodub `.mdc` + CONTRACT. Own blockers. Caption-verify voices. Return a numbered scoreboard. Don’t stop at “your turn” unless two real paths failed.
