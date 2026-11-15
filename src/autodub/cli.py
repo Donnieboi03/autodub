@@ -95,6 +95,55 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def build_watch_player_argv(
+    media: Path,
+    mka: Path,
+    *,
+    out_dir: Path,
+    player_path: str | None = None,
+    ffmpeg_path: str | None = None,
+) -> list[str]:
+    """Build argv to play ``media`` video with external EN audio from ``mka``.
+
+    Prefer mpv ``--audio-file``. ffplay cannot take dual ``-i``; remux to a
+    short-lived temp mp4 under ``out_dir`` then play that.
+    """
+    player = player_path or shutil.which("mpv") or shutil.which("ffplay")
+    if not player:
+        raise FileNotFoundError("need mpv or ffplay on PATH to watch")
+    media = Path(media)
+    mka = Path(mka)
+    out_dir = Path(out_dir)
+    if Path(player).name == "mpv":
+        return [player, f"--audio-file={mka}", str(media)]
+
+    ffmpeg = ffmpeg_path or shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise FileNotFoundError("ffplay fallback needs ffmpeg to remux video+mka")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    temp_mp4 = out_dir / f"{media.stem}.autodub.watch.mp4"
+    remux = [
+        ffmpeg,
+        "-y",
+        "-i",
+        str(media),
+        "-i",
+        str(mka),
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-shortest",
+        str(temp_mp4),
+    ]
+    subprocess.check_call(remux)
+    return [player, "-autoexit", str(temp_mp4)]
+
+
 def _cmd_watch(args: argparse.Namespace) -> int:
     """Run pipeline if mka missing/stale, then play video + EN track."""
     from autodub.pipeline import run_file_pipeline
@@ -125,27 +174,11 @@ def _cmd_watch(args: argparse.Namespace) -> int:
     else:
         print(json.dumps({"mka": str(mka), "skipped_run": True}, indent=2))
 
-    player = shutil.which("mpv") or shutil.which("ffplay")
-    if not player:
-        print("fail: need mpv or ffplay on PATH to watch", file=sys.stderr)
+    try:
+        cmd = build_watch_player_argv(media, mka, out_dir=out)
+    except FileNotFoundError as exc:
+        print(f"fail: {exc}", file=sys.stderr)
         return 2
-    if Path(player).name == "mpv":
-        cmd = [player, f"--audio-file={mka}", str(media)]
-    else:
-        # ffplay: play video muted + audio from mka via amix is hard; play mka with video as ref
-        cmd = [
-            player,
-            "-autoexit",
-            "-i",
-            str(media),
-            "-i",
-            str(mka),
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            "-shortest",
-        ]
     print(f"# playing: {' '.join(cmd)}", file=sys.stderr)
     return int(subprocess.call(cmd))
 
