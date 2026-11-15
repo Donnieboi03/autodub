@@ -275,3 +275,28 @@ def test_duck_gain_and_demucs_cache_hit_on_report_schema():
     # exercised with write in scorecard test; schema presence is the gate here
     hist = report["cast_method_histogram"]
     assert isinstance(hist, dict)
+
+
+def test_score_run_cli_exists_and_fails_fast_without_finished_report(tmp_path: Path):
+    """autodub score-run --out DIR fails fast (non-zero) without a finished report."""
+    empty = tmp_path / "empty_out"
+    empty.mkdir()
+    proc = subprocess.run(
+        [
+            "uv",
+            "run",
+            "autodub",
+            "score-run",
+            "--out",
+            str(empty),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parents[2]),
+    )
+    # Must be a real subcommand (not argparse invalid choice) and non-zero without report
+    combined = (proc.stderr + proc.stdout).lower()
+    assert "invalid choice" not in combined, (
+        "score-run CLI missing from autodub (CONTRACT requires score-run)"
+    )
+    assert proc.returncode != 0, "score-run must fail fast without finished report"
